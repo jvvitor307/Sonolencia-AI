@@ -1,0 +1,35 @@
+Acuracia: 0.9221
+Loss: 0.1938
+
+              precision    recall  f1-score   support
+
+      Closed       0.99      0.80      0.89       361
+        Open       0.85      0.99      0.92       186
+     no_yawn       0.88      0.97      0.92       469
+        yawn       0.96      0.94      0.95       448
+
+    accuracy                           0.92      1464
+   macro avg       0.92      0.93      0.92      1464
+weighted avg       0.93      0.92      0.92      1464
+
+
+Metricas por classe:
+  Closed:
+    Precision: 0.9931
+    Recall: 0.8006
+    F1-Score: 0.8865
+  Open:
+    Precision: 0.8486
+    Recall: 0.9946
+    F1-Score: 0.9158
+  no_yawn:
+    Precision: 0.8813
+    Recall: 0.9659
+    F1-Score: 0.9217
+  yawn:
+    Precision: 0.9592
+    Recall: 0.9442
+    F1-Score: 0.9516
+
+Macro F1: 0.9189
+Weighted F1: 0.9214

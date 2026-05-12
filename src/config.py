@@ -1,0 +1,39 @@
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+RAW_DIR = os.path.join(DATA_DIR, "raw")
+PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
+MODEL_DIR = os.path.join(DATA_DIR, "models")
+RESULTS_DIR = os.path.join(BASE_DIR, "results")
+
+MODEL_PATH = os.path.join(MODEL_DIR, "eye_classifier.h5")
+CNN_MODEL_PATH = os.path.join(MODEL_DIR, "eye_classifier_cnn.h5")
+
+EAR_THRESHOLD = 0.21
+MAR_THRESHOLD = 0.6
+CONSEC_FRAMES_EAR = 15
+CONSEC_FRAMES_MAR = 10
+
+IMG_SIZE = (224, 224)
+BATCH_SIZE = 32
+EPOCHS = 20
+LEARNING_RATE = 1e-4
+
+FPS_TARGET = 30
+
+os.makedirs(RAW_DIR, exist_ok=True)
+os.makedirs(PROCESSED_DIR, exist_ok=True)
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+MEDIAPIPE_LEFT_EYE = [362, 385, 387, 263, 373, 380]
+MEDIAPIPE_RIGHT_EYE = [33, 160, 158, 133, 153, 144]
+
+MEDIAPIPE_OUTER_LIP = [61, 39, 37, 0, 267, 269, 291, 405, 314, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191]
+MEDIAPIPE_INNER_LIP = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 314, 405, 291, 375, 321, 408, 329, 282, 308]
+
+EAR_LANDMARKS_LEFT = [362, 385, 387, 263, 373, 380]
+EAR_LANDMARKS_RIGHT = [33, 160, 158, 133, 153, 144]
+
+MAR_LANDMARKS = [13, 14, 78, 308, 82, 312]

@@ -1,0 +1,10 @@
+==================================================
+BENCHMARK DE INFERENCIA
+==================================================
+
+Iteracoes: 100
+Tempo medio: 99.22 ms
+Tempo minimo: 54.06 ms
+Tempo maximo: 137.37 ms
+FPS equivalente: 10.1
+Status: LENTO para tempo real
