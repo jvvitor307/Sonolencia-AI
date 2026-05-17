@@ -151,7 +151,7 @@ def train_model(model_type="mobilenetv2"):
     num_classes = len(train_gen.class_indices)
 
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+        EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True),
         ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-7),
         ModelCheckpoint(
             CNN_MODEL_PATH,

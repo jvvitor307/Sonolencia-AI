@@ -1,7 +1,8 @@
+import time
 import numpy as np
 import mediapipe as mp
 from src.config import (
-    EAR_THRESHOLD, MAR_THRESHOLD,
+    EAR_THRESHOLD, MAR_THRESHOLD, EYES_CLOSED_TIME, CONSEC_FRAMES_MAR,
     MEDIAPIPE_LEFT_EYE, MEDIAPIPE_RIGHT_EYE,
 )
 
@@ -25,14 +26,6 @@ def get_landmarks(frame_rgb):
 
 
 def calculate_ear(landmarks):
-    """
-    EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
-
-    Para cada olho:
-      p1 = canto externo, p4 = canto interno
-      p2, p3 = pálpebra superior
-      p5, p6 = pálpebra inferior
-    """
     left_ear = _single_eye_ear(landmarks, MEDIAPIPE_LEFT_EYE)
     right_ear = _single_eye_ear(landmarks, MEDIAPIPE_RIGHT_EYE)
     return (left_ear + right_ear) / 2.0
@@ -57,13 +50,6 @@ def _single_eye_ear(landmarks, indices):
 
 
 def calculate_mar(landmarks):
-    """
-    MAR (Mouth Aspect Ratio) = ||p13-p14|| / ||p78-p308||
-
-    p13, p14 = lábio superior e inferior (centro)
-    p78 = canto esquerdo da boca
-    p308 = canto direito da boca
-    """
     upper_lip = landmarks[13]
     lower_lip = landmarks[14]
     left_corner = landmarks[78]
@@ -78,7 +64,8 @@ def calculate_mar(landmarks):
     return vertical / horizontal
 
 
-def detect_drowsiness(landmarks, ear_counter, mar_counter):
+def detect_drowsiness(landmarks, eyes_closed_start, mar_counter):
+    now = time.time()
     ear = calculate_ear(landmarks)
     mar = calculate_mar(landmarks)
 
@@ -86,9 +73,10 @@ def detect_drowsiness(landmarks, ear_counter, mar_counter):
     mouth_open = mar > MAR_THRESHOLD
 
     if eye_closed:
-        ear_counter += 1
+        if eyes_closed_start is None:
+            eyes_closed_start = now
     else:
-        ear_counter = max(0, ear_counter - 1)
+        eyes_closed_start = None
 
     if mouth_open:
         mar_counter += 1
@@ -98,39 +86,28 @@ def detect_drowsiness(landmarks, ear_counter, mar_counter):
     drowsy = False
     reason = ""
 
-    if ear_counter >= 15:
+    eyes_closed_duration = 0.0
+    if eyes_closed_start is not None:
+        eyes_closed_duration = now - eyes_closed_start
+
+    if eyes_closed_duration >= EYES_CLOSED_TIME:
         drowsy = True
-        reason = "OLHOS FECHADOS"
-    elif mar_counter >= 10:
+        reason = "DORMINDO"
+    elif mar_counter >= CONSEC_FRAMES_MAR:
         drowsy = True
         reason = "BOCEJO DETECTADO"
 
     return {
         'ear': ear,
         'mar': mar,
-        'ear_counter': ear_counter,
+        'eyes_closed_duration': eyes_closed_duration,
         'mar_counter': mar_counter,
         'eye_closed': eye_closed,
         'mouth_open': mouth_open,
         'drowsy': drowsy,
         'reason': reason,
+        'eyes_closed_start': eyes_closed_start,
     }
-
-
-def extract_eye_roi(frame, landmarks, eye_indices, padding=10):
-    points = landmarks[eye_indices]
-    x_min = int(np.min(points[:, 0])) - padding
-    x_max = int(np.max(points[:, 0])) + padding
-    y_min = int(np.min(points[:, 1])) - padding
-    y_max = int(np.max(points[:, 1])) + padding
-
-    h, w = frame.shape[:2]
-    x_min = max(0, x_min)
-    x_max = min(w, x_max)
-    y_min = max(0, y_min)
-    y_max = min(h, y_max)
-
-    return frame[y_min:y_max, x_min:x_max]
 
 
 def get_face_mesh_instance():

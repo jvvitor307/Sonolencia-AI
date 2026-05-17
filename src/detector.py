@@ -3,30 +3,25 @@ import time
 import collections
 import numpy as np
 import cv2
-import tensorflow as tf
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 
 from src.config import (
-    CNN_MODEL_PATH, IMG_SIZE, RESULTS_DIR,
-    EAR_THRESHOLD, MAR_THRESHOLD, MEDIAPIPE_LEFT_EYE, MEDIAPIPE_RIGHT_EYE,
+    RESULTS_DIR, EAR_THRESHOLD, MAR_THRESHOLD, EYES_CLOSED_TIME,
 )
 from src.landmarks import (
     get_landmarks, calculate_ear, calculate_mar,
-    detect_drowsiness, extract_eye_roi, get_face_mesh_instance,
+    detect_drowsiness, get_face_mesh_instance,
 )
 
 
 class DrowsinessDetector:
-    def __init__(self, use_cnn=True, camera_id=0):
-        self.use_cnn = use_cnn
+    def __init__(self, camera_id=0):
         self.camera_id = camera_id
-        self.model = None
         self.face_mesh = get_face_mesh_instance()
 
-        self.ear_counter = 0
+        self.eyes_closed_start = None
         self.mar_counter = 0
         self.fps_history = collections.deque(maxlen=30)
 
@@ -36,36 +31,6 @@ class DrowsinessDetector:
 
         self.alarm_active = False
         self.start_time = time.time()
-
-        if self.use_cnn:
-            self._load_model()
-
-    def _load_model(self):
-        if os.path.exists(CNN_MODEL_PATH):
-            self.model = tf.keras.models.load_model(CNN_MODEL_PATH)
-            print(f"Modelo CNN carregado: {CNN_MODEL_PATH}")
-        else:
-            print("Modelo CNN não encontrado. Usando apenas EAR/MAR geométrico.")
-            self.use_cnn = False
-
-    def _predict_eye_state(self, eye_roi):
-        if self.model is None:
-            return None, 0.0
-
-        try:
-            eye_resized = cv2.resize(eye_roi, IMG_SIZE)
-            eye_normalized = eye_resized.astype(np.float32) / 255.0
-            eye_batch = np.expand_dims(eye_normalized, axis=0)
-            prediction = self.model.predict(eye_batch, verbose=0)[0]
-
-            class_names = ['Closed', 'Open', 'no_yawn', 'yawn']
-            class_idx = np.argmax(prediction)
-            confidence = prediction[class_idx]
-
-            is_closed = class_idx == 0
-            return is_closed, float(confidence)
-        except Exception:
-            return None, 0.0
 
     def _draw_hud(self, frame, result, fps):
         h, w = frame.shape[:2]
@@ -100,6 +65,11 @@ class DrowsinessDetector:
         cv2.putText(frame, f"MAR: {result['mar']:.3f}", (10, info_y + 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, mar_color, 2)
 
+        if result['eye_closed'] and result['eyes_closed_duration'] > 0:
+            dur_color = (0, 0, 255) if result['eyes_closed_duration'] >= EYES_CLOSED_TIME else (0, 165, 255)
+            cv2.putText(frame, f"Olhos fechados: {result['eyes_closed_duration']:.1f}s",
+                        (10, info_y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, dur_color, 2)
+
         ear_bar_w = int(min(result['ear'] / 0.4, 1.0) * 150)
         cv2.rectangle(frame, (w - 170, 20), (w - 170 + 150, 40), (50, 50, 50), -1)
         cv2.rectangle(frame, (w - 170, 20), (w - 170 + ear_bar_w, 40), ear_color, -1)
@@ -109,12 +79,6 @@ class DrowsinessDetector:
         cv2.rectangle(frame, (w - 170, 55), (w - 170 + 150, 75), (50, 50, 50), -1)
         cv2.rectangle(frame, (w - 170, 55), (w - 170 + mar_bar_w, 75), mar_color, -1)
         cv2.putText(frame, "MAR", (w - 170, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-
-        if self.use_cnn and result.get('cnn_closed') is not None:
-            cnn_text = "CNN: FECHADO" if result['cnn_closed'] else "CNN: ABERTO"
-            cnn_color = (0, 0, 255) if result['cnn_closed'] else (0, 255, 0)
-            cv2.putText(frame, f"{cnn_text} ({result['cnn_conf']:.2f})",
-                        (10, info_y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, cnn_color, 2)
 
         return frame
 
@@ -135,7 +99,6 @@ class DrowsinessDetector:
             writer = cv2.VideoWriter(output_path, fourcc, 20.0, (640, 480))
 
         prev_time = time.time()
-        frame_count = 0
 
         print("Pressione 'q' para sair, 'g' para gravar gráfico EAR.")
 
@@ -150,43 +113,23 @@ class DrowsinessDetector:
 
             result = {
                 'ear': 0.3, 'mar': 0.0,
-                'ear_counter': 0, 'mar_counter': 0,
+                'eyes_closed_duration': 0.0, 'mar_counter': 0,
                 'eye_closed': False, 'mouth_open': False,
                 'drowsy': False, 'reason': '',
-                'cnn_closed': None, 'cnn_conf': 0.0,
+                'eyes_closed_start': None,
             }
 
             if landmarks is not None:
-                result = detect_drowsiness(landmarks, self.ear_counter, self.mar_counter)
-                self.ear_counter = result['ear_counter']
+                result = detect_drowsiness(landmarks, self.eyes_closed_start, self.mar_counter)
+                self.eyes_closed_start = result['eyes_closed_start']
                 self.mar_counter = result['mar_counter']
 
                 current_time = time.time() - self.start_time
                 self.ear_history.append(result['ear'])
                 self.mar_history.append(result['mar'])
                 self.time_history.append(current_time)
-
-                if self.use_cnn:
-                    try:
-                        left_eye = extract_eye_roi(frame, landmarks, MEDIAPIPE_LEFT_EYE)
-                        right_eye = extract_eye_roi(frame, landmarks, MEDIAPIPE_RIGHT_EYE)
-                        eyes = [e for e in [left_eye, right_eye] if e.size > 0]
-                        if eyes:
-                            eye = max(eyes, key=lambda e: e.shape[0] * e.shape[1])
-                            cnn_closed, cnn_conf = self._predict_eye_state(eye)
-                            result['cnn_closed'] = cnn_closed
-                            result['cnn_conf'] = cnn_conf
-
-                            if cnn_closed is not None and cnn_closed and cnn_conf > 0.7:
-                                if not result['drowsy']:
-                                    self.ear_counter += 3
-                                    result['ear_counter'] = self.ear_counter
-                                    if self.ear_counter >= 15:
-                                        result['drowsy'] = True
-                                        result['reason'] = "OLHOS FECHADOS (CNN)"
-                    except Exception:
-                        pass
             else:
+                self.eyes_closed_start = None
                 cv2.putText(frame, "Rosto nao detectado", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
 
@@ -263,9 +206,8 @@ class DrowsinessDetector:
             f.write(f"Tempo de inferencia medio: {(1000 / max(avg_fps, 0.1)):.2f} ms\n")
             f.write(f"Limiar EAR: {EAR_THRESHOLD}\n")
             f.write(f"Limiar MAR: {MAR_THRESHOLD}\n")
-            f.write(f"Frames consecutivos para olhos: 15\n")
+            f.write(f"Tempo para olhos fechados: {EYES_CLOSED_TIME}s\n")
             f.write(f"Frames consecutivos para boca: 10\n")
-            f.write(f"CNN utilizada: {'Sim' if self.use_cnn else 'Nao'}\n")
             f.write(f"\nTotal de frames processados: {len(self.ear_history)}\n")
             if self.ear_history:
                 ears = list(self.ear_history)

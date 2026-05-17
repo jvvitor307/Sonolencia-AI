@@ -1,6 +1,6 @@
 # Detecção de Fadiga em Motoristas por Meio de Visão Computacional: Uma Abordagem Híbrida com MediaPipe Face Mesh e MobileNetV2
 
-**Autor:** João Victor Vitor  
+**Autor:** João Vitor Melo Fontenele, 
 **Disciplina:** Visão Computacional — Pós-graduação  
 **Data:** Maio de 2026
 

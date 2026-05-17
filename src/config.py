@@ -7,20 +7,10 @@ PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
 MODEL_DIR = os.path.join(DATA_DIR, "models")
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
 
-MODEL_PATH = os.path.join(MODEL_DIR, "eye_classifier.h5")
-CNN_MODEL_PATH = os.path.join(MODEL_DIR, "eye_classifier_cnn.h5")
-
 EAR_THRESHOLD = 0.21
 MAR_THRESHOLD = 0.6
-CONSEC_FRAMES_EAR = 15
+EYES_CLOSED_TIME = 1
 CONSEC_FRAMES_MAR = 10
-
-IMG_SIZE = (224, 224)
-BATCH_SIZE = 32
-EPOCHS = 20
-LEARNING_RATE = 1e-4
-
-FPS_TARGET = 30
 
 os.makedirs(RAW_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)

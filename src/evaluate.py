@@ -10,9 +10,11 @@ from sklearn.metrics import classification_report, confusion_matrix, roc_curve, 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import load_model
 
-from src.config import (
-    CNN_MODEL_PATH, PROCESSED_DIR, IMG_SIZE, BATCH_SIZE, RESULTS_DIR,
-)
+from src.config import PROCESSED_DIR, RESULTS_DIR
+
+IMG_SIZE = (224, 224)
+BATCH_SIZE = 32
+CNN_MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "models", "eye_classifier_cnn.h5")
 from src.landmarks import calculate_ear, calculate_mar, get_landmarks
 from src.config import MEDIAPIPE_LEFT_EYE, MEDIAPIPE_RIGHT_EYE
 
