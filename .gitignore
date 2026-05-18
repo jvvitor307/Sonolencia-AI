@@ -1,11 +1,10 @@
 venv/
 __pycache__/
 *.pyc
-*.h5
 *.avi
+*.task
 .DS_Store
 .cache/
 data/processed/
 data/raw/
-data/models/
 .venv/

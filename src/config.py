@@ -1,10 +1,6 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-RAW_DIR = os.path.join(DATA_DIR, "raw")
-PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
-MODEL_DIR = os.path.join(DATA_DIR, "models")
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
 
 EAR_THRESHOLD = 0.21
@@ -12,9 +8,10 @@ MAR_THRESHOLD = 0.6
 EYES_CLOSED_TIME = 1
 CONSEC_FRAMES_MAR = 10
 
-os.makedirs(RAW_DIR, exist_ok=True)
-os.makedirs(PROCESSED_DIR, exist_ok=True)
-os.makedirs(MODEL_DIR, exist_ok=True)
+CALIBRATION_DURATION = 3.0
+CALIBRATION_RATIO = 0.6
+CALIBRATION_MIN_SAMPLES = 30
+
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 MEDIAPIPE_LEFT_EYE = [362, 385, 387, 263, 373, 380]
