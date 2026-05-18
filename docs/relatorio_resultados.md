@@ -1,4 +1,4 @@
-# Detecção de Fadiga em Motoristas por Meio de Visão Computacional: Uma Abordagem Híbrida com MediaPipe Face Mesh e MobileNetV2
+# Detecção de Fadiga em Motoristas por Meio de Visão Computacional: Uma Abordagem com MediaPipe Face Mesh e Análise Geométrica
 
 **Autor:** João Vitor Melo Fontenele, 
 **Disciplina:** Visão Computacional — Pós-graduação  
@@ -10,12 +10,9 @@
 
 A fadiga ao volante é uma das principais causas de acidentes de trânsito em todo o mundo. Segundo a Organização Mundial da Saúde, o sono e a fadiga respondem por até 20% dos acidentes graves em rodovias. A detecção precoce de sinais de fadiga — como o fechamento prolongado dos olhos e o bocejo excessivo — pode alertar o motorista antes que um acidente ocorra.
 
-Este trabalho propõe um sistema de detecção de fadiga em tempo real que combina duas abordagens complementares:
+Este trabalho propõe um sistema de detecção de fadiga em tempo real baseado em **análise geométrica facial** via MediaPipe Face Mesh, utilizando as razões de aspecto do olho (EAR) e da boca (MAR).
 
-1. **Análise geométrica facial** via MediaPipe Face Mesh, utilizando as razões de aspecto do olho (EAR) e da boca (MAR).
-2. **Classificação por aprendizado profundo** com uma rede neural convolucional (CNN) baseada na arquitetura MobileNetV2, treinada para validar as detecções do módulo geométrico e reduzir falsos positivos.
-
-A abordagem híbrida visa equilibrar velocidade de inferência com robustez na classificação, dois fatores críticos em sistemas embarcados automotivos.
+A abordagem busca equilibrar velocidade de inferência com robustez na detecção, dois fatores críticos em sistemas embarcados automotivos.
 
 ---
 
@@ -46,84 +43,11 @@ Onde $p_{13}$ e $p_{14}$ são os lábios superior e inferior (centro), e $p_{78}
 
 O MediaPipe Face Mesh é uma solução de estimativa de landmarks faciais que fornece 468 pontos tridimensionais do rosto em tempo real. Sua vantagem sobre detectores tradicionais (como Haar Cascades ou Dlib) é a capacidade de operar sem necessidade de treinamento, com alta precisão e baixa latência.
 
-### 2.4 MobileNetV2 e Transfer Learning
-
-A MobileNetV2 (Sandler et al., 2018) é uma arquitetura de rede neural projetada para dispositivos móveis e embarcados. Utiliza convoluções separáveis em profundidade (*depthwise separable convolutions*) e blocos residuais invertidos (*inverted residuals*), alcançando boa acurácia com número reduzido de parâmetros.
-
-O transfer learning consiste em utilizar pesos pré-treinados no ImageNet (1.4 milhões de imagens, 1000 classes) como ponto de partida, congelando o *backbone* e treinando apenas as camadas superiores. Em seguida, aplica-se *fine-tuning* descongelando as camadas finais do backbone para ajuste fino no domínio específico.
-
 ---
 
 ## 3. Metodologia
 
-### 3.1 Dataset
-
-Foi utilizado o **Drowsiness Dataset** (hoangtung719, Kaggle), que contém imagens faciais categorizadas em quatro classes:
-
-| Classe | Descrição | Treino | Validação | Teste | Total |
-|--------|-----------|--------|-----------|-------|-------|
-| Closed | Olhos fechados | 2.029 | 336 | 361 | 2.726 |
-| Open | Olhos abertos | 2.204 | 336 | 186 | 2.726 |
-| yawn | Pessoa bocejando | 2.150 | 427 | 448 | 3.025 |
-| no_yawn | Sem bocejo | 2.165 | 455 | 469 | 3.089 |
-| **Total** | | **8.548** | **1.554** | **1.464** | **11.566** |
-
-O dataset já estava dividido em conjuntos de treino, validação e teste, o que garantiu uma avaliação não enviesada do modelo.
-
-### 3.2 Pré-processamento e Augmentação
-
-As imagens foram redimensionadas para 224×224 pixels e normalizadas para o intervalo [0, 1]. Para o conjunto de treino, foram aplicadas as seguintes técnicas de augmentação de dados:
-
-- Rotação aleatória de até 15°
-- Translação horizontal e vertical de até 10%
-- Cisalhamento (*shear*) de até 10%
-- Zoom aleatório de até 10%
-- Espelhamento horizontal
-- Variação de brilho entre 80% e 120%
-
-Essas técnicas aumentam a diversidade do conjunto de treino e reduzem o risco de overfitting.
-
-### 3.3 Arquitetura do Modelo
-
-O modelo foi construído sobre a MobileNetV2 pré-treinada no ImageNet, com as seguintes camadas adicionadas:
-
-```
-MobileNetV2 (backbone, pesos ImageNet, congelado)
-    ↓
-GlobalAveragePooling2D
-    ↓
-Dropout (0.3)
-    ↓
-Dense (128, ReLU)
-    ↓
-Dropout (0.3)
-    ↓
-Dense (4, Softmax)
-```
-
-**Total de parâmetros treináveis (camadas superiores):** ~165.000  
-**Parâmetros do backbone (congelados na Fase 1):** ~2.2 milhões
-
-### 3.4 Estratégia de Treinamento
-
-O treinamento foi dividido em duas fases:
-
-**Fase 1 — Treino com backbone congelado (10 épocas):**
-- Otimizador: Adam (lr = 1×10⁻⁴)
-- Apenas as camadas superiores são treinadas
-- Objetivo: aprender representações específicas do domínio sem destruir os pesos do ImageNet
-
-**Fase 2 — Fine-tuning (10 épocas):**
-- As primeiras 100 camadas permanecem congeladas
-- Otimizador: Adam (lr = 1×10⁻⁵, reduzido 10x)
-- Objetivo: ajustar as features de alto nível do backbone ao domínio de fadiga
-
-**Callbacks utilizados:**
-- *EarlyStopping*: paciência de 5 épocas monitorando `val_loss`
-- *ReduceLROnPlateau*: redução de 50% no learning rate após 3 épocas sem melhora
-- *ModelCheckpoint*: salva o melhor modelo com base em `val_accuracy`
-
-### 3.5 Pipeline de Detecção em Tempo Real
+### 3.1 Pipeline de Detecção em Tempo Real
 
 O sistema de detecção segue o fluxo:
 
@@ -131,177 +55,104 @@ O sistema de detecção segue o fluxo:
 Câmera → Frame RGB → MediaPipe Face Mesh (468 landmarks)
                                 ↓
                     ┌──────────────────────────┐
-                    │  Cálculo Geométrico       │
-                    │  • EAR (olhos)            │
-                    │  • MAR (boca)             │
+                    │  Cálculo Geométrico      │
+                    │  • EAR (olhos)           │
+                    │  • MAR (boca)            │
                     └──────────────────────────┘
                                 ↓
-                    ┌──────────────────────────┐
-                    │  Verificação por CNN      │
-                    │  • Recorte do olho (ROI)  │
-                    │  • MobileNetV2 classifica  │
-                    │  • Confirma fechamento     │
-                    └──────────────────────────┘
-                                ↓
-                    ┌──────────────────────────┐
-                    │  Lógica de Decisão        │
-                    │  • EAR < 0.21 por 15 frames│
+                    ┌────────────────────────────┐
+                    │  Lógica de Decisão         │
+                    │  • EAR < 0.21 por 1s       │
                     │  • MAR > 0.6 por 10 frames │
-                    │  • CNN confirma → ALERTA   │
-                    └──────────────────────────┘
+                    │  → ALERTA                  │
+                    └────────────────────────────┘
 ```
 
-A CNN atua como segunda opinião: quando o EAR detecta olhos fechados, o recorte do olho é passado à rede neural para validação, reduzindo falsos positivos em pessoas com olhos naturalmente amendoados.
-
-### 3.6 Hiperparâmetros Configurados
+### 3.2 Hiperparâmetros Configurados
 
 | Parâmetro | Valor |
 |-----------|-------|
 | Limiar EAR | 0.21 |
 | Limiar MAR | 0.6 |
-| Frames consecutivos (olhos) | 15 |
+| Tempo olhos fechados | 1s |
 | Frames consecutivos (boca) | 10 |
-| Tamanho da imagem | 224 × 224 |
-| Batch size | 32 |
-| Épocas máximas | 20 |
-| Learning rate (Fase 1) | 1×10⁻⁴ |
-| Learning rate (Fase 2) | 1×10⁻⁵ |
+
+### 3.3 Calibração Adaptativa
+
+O sistema implementa calibração adaptativa para ajustar os limiares ao rosto do motorista:
+
+| Parâmetro | Valor |
+|-----------|-------|
+| Duração da calibração | 3.0s |
+| Razão de calibração | 0.6 |
+| Amostras mínimas | 30 |
+
+Durante a calibração, o sistema coleta amostras do EAR em tempo real e ajusta o limiar automaticamente, tornando a detecção mais robusta para diferentes tipos faciais.
 
 ---
 
 ## 4. Resultados
 
-### 4.1 Métricas de Classificação
+### 4.1 Métricas de Inferência
 
-O modelo foi avaliado no conjunto de teste (1.464 imagens não vistas durante o treino):
+O pipeline geométrico (EAR/MAR via MediaPipe) opera a 25–30 FPS mesmo em CPU, tornando o sistema viável em hardware embarcado.
 
-| Classe | Precision | Recall | F1-Score | Suporte |
-|--------|-----------|--------|----------|---------|
-| Closed (olhos fechados) | 0.9931 | 0.8006 | 0.8865 | 361 |
-| Open (olhos abertos) | 0.8486 | 0.9946 | 0.9158 | 186 |
-| no_yawn (sem bocejo) | 0.8813 | 0.9659 | 0.9217 | 469 |
-| yawn (bocejando) | 0.9592 | 0.9442 | 0.9516 | 448 |
+### 4.2 Análise do Desempenho
 
-| Métrica Global | Valor |
-|----------------|-------|
-| **Acurácia** | **92.21%** |
-| Macro Precision | 0.92 |
-| Macro Recall | 0.93 |
-| **Macro F1-Score** | **0.9189** |
-| Weighted F1-Score | 0.9214 |
-| Loss (Cross-Entropy) | 0.1938 |
+**Vantagens da abordagem geométrica:**
 
-### 4.2 Análise por Classe
-
-**Closed (olhos fechados):**
-- Alta precisão (0.99) indica que quando o modelo classifica como "olhos fechados", está correto em 99% dos casos.
-- O recall de 0.80 revela que ~20% dos olhos fechados não são detectados (falsos negativos). Isso é intencionalmente conservador em um contexto de segurança — é preferível a outros tipos de erro, pois o sistema complementar (EAR geométrico) captura esses casos.
-
-**Open (olhos abertos):**
-- Recall quase perfeito (0.99), indicando que o modelo raramente confunde olhos abertos com fechados.
-- A precisão de 0.85 é ligeiramente menor, sugerindo que algumas imagens de outras classes são classificadas como "Open".
-
-**yawn (bocejo):**
-- Melhor desempenho geral (F1 = 0.95), demonstrando que o modelo aprendeu bem as características visuais do bocejo.
-
-**no_yawn (sem bocejo):**
-- Recall elevado (0.97), indicando boa capacidade de identificar corretamente situações normais de condução.
-
-### 4.3 Matriz de Confusão
-
-A Figura 1 apresenta a matriz de confusão absoluta e normalizada. Os principais padrões de erro observados:
-
-- **Closed → Open**: 72 imagens de olhos fechados foram classificadas como abertas (19.9%). Atribuído a imagens com pálpebras parcialmente fechadas.
-- **Open → no_yawn**: 1 imagem de olho aberto classificada como "sem bocejo" — erro semanticamente menor, pois ambas representam estado normal.
-- **no_yawn → Open**: 12 imagens sem bocejo classificadas como olhos abertos.
-
-Esses erros de confusão entre "Open" e "no_yawn" são semanticamente compatíveis, pois ambas representam estados de não-fadiga do motorista.
-
-![Matriz de Confusão](results/final_confusion_matrix.png)
-
-*Figura 1: Matriz de confusão — valores absolutos (esquerda) e normalizados (direita).*
-
-### 4.4 Curvas ROC e AUC
-
-A Figura 2 apresenta as curvas ROC (Receiver Operating Characteristic) para cada classe:
-
-![Curvas ROC](results/roc_curves.png)
-
-*Figura 2: Curvas ROC por classe com valores de AUC.*
-
-Todas as classes apresentam AUC superior a 0.95, indicando excelente capacidade discriminativa do modelo independentemente do limiar de classificação escolhido.
-
-### 4.5 Benchmark de Inferência
-
-O tempo de inferência foi medido com 100 iterações sobre uma imagem de entrada de 224×224×3:
-
-| Métrica | Valor |
-|---------|-------|
-| Tempo médio | 99.22 ms |
-| Tempo mínimo | 54.06 ms |
-| Tempo máximo | 137.37 ms |
-| **FPS equivalente (CNN)** | **10.1** |
-
-*Nota:* Este benchmark mede apenas a inferência da CNN. O pipeline completo (captura + MediaPipe + EAR/MAR + CNN) opera a aproximadamente 8–10 FPS em CPU. Em GPU (mesmo uma T4 ou Jetson Nano), espera-se 2–3x de ganho, alcançando 20–30 FPS.
-
-Para aplicações automotivas, o módulo geométrico (EAR/MAR via MediaPipe) opera a 25–30 FPS mesmo em CPU. A CNN é invocada apenas quando o EAR cai abaixo do limiar, não a cada frame, tornando o sistema viável em hardware embarcado.
+- **Velocidade**: ~2ms/frame via MediaPipe, permitindo operação em tempo real
+- **Simplicidade**: não requer treinamento de modelo nem GPU
+- **Leveza**: sem dependências pesadas, adequado para dispositivos embarcados
+- **Calibração adaptativa**: ajusta-se automaticamente ao motorista
 
 ---
 
 ## 5. Discussão
 
-### 5.1 Abordagem Híbrida: Vantagens e Limitações
+### 5.1 Vantagens e Limitações
 
-A principal contribuição deste trabalho é a combinação de duas técnicas complementares:
+**Vantagens:**
 
-1. **EAR/MAR geométrico** — extremamente rápido (~2ms/frame via MediaPipe), mas suscetível a falsos positivos em pessoas com olhos naturalmente amendoados ou variações de iluminação.
+1. **EAR/MAR geométrico** — extremamente rápido (~2ms/frame via MediaPipe), sem necessidade de GPU ou treinamento prévio.
+2. **Calibração adaptativa** — ajusta os limiares ao rosto do motorista, reduzindo falsos positivos.
 
-2. **CNN validadora** — mais lenta (~99ms/inferência), mas com alta precisão (0.99 para "Closed"), atuando como segunda opinião.
+**Limitações:**
 
-Ao invocar a CNN apenas quando o EAR sinaliza alerta, o sistema mantém alta taxa de frames enquanto reduz significativamente os falsos positivos.
+1. **Falsos positivos em olhos amendoados**: pessoas com olhos naturalmente menores podem gerar detecções incorretas.
+2. **Iluminação adversa**: O MediaPipe pode falhar em condições de baixa luz ou contraluz extrema. Pré-processamento com CLAHE (Histogram Adaptive Equalization) pode mitigar este problema.
+3. **Óculos escuros**: landmarks oculares são parcialmente obstruídos, prejudicando o cálculo do EAR. Uma abordagem usando apenas MAR poderia contornar esta limitação.
 
 ### 5.2 Comparação com a Literatura
 
 | Método | Acurácia | FPS | Referência |
 |--------|----------|-----|------------|
 | EAR + SVM | ~85% | 30 | Soukupová & Čech, 2016 |
-| CNN simples (do zero) | ~88% | 15 | Trabalhos comparáveis |
-| MobileNetV2 (este trabalho) | **92.2%** | 10 (CNN) / 25+ (pipeline) | — |
+| EAR/MAR + MediaPipe (este trabalho) | — | 25–30 | — |
 | ResNet50 + Attention | ~94% | 5 | Literatura recente |
 
-O modelo proposto atinge competitiva acurácia de 92.2% com arquitetura leve (11MB), viável para deploy em dispositivos embarcados.
-
-### 5.3 Limitações Conhecidas
-
-1. **Recall de "Closed" (0.80)**: ~20% dos olhos fechados não são detectados pela CNN. O EAR geométrico compensa essa lacuna, mas o sistema ideal requer melhoria nesta métrica.
-
-2. **Desempenho em CPU**: 10 FPS para a CNN é marginal para tempo real. Solução: invocar a CNN apenas em frames de alerta, ou utilizar quantização INT8 (TensorFlow Lite) para acelerar a inferência em 3–4x.
-
-3. **Iluminação adversa**: O MediaPipe pode falhar em condições de baixa luz ou contraluz extrema. Pré-processamento com CLAHE (Histogram Adaptive Equalization) pode mitigar este problema.
-
-4. **Óculos escuros**: landmarks oculares são parcialmente obstruídos, prejudicando o cálculo do EAR. Uma abordagem por cascata — detectar óculos e usar apenas MAR + CNN — poderia contornar esta limitação.
+O sistema proposto prioriza velocidade de inferência e leveza, sendo viável para deploy em dispositivos embarcados sem necessidade de GPU.
 
 ---
 
 ## 6. Conclusão
 
-Este trabalho apresentou um sistema híbrido para detecção de fadiga em motoristas, combinando análise geométrica de landmarks faciais (EAR/MAR via MediaPipe Face Mesh) com classificação por aprendizado profundo (MobileNetV2 com transfer learning).
+Este trabalho apresentou um sistema para detecção de fadiga em motoristas baseado em análise geométrica de landmarks faciais (EAR/MAR via MediaPipe Face Mesh).
 
 Os resultados demonstram:
-- **Acurácia de 92.21%** e **F1-Score macro de 0.92** no conjunto de teste
-- **Precisão de 0.99** para a classe "Closed", minimizando falsos alertas
-- **Tempo de inferência viável** (~10 FPS em CPU para a CNN, ~25 FPS para o pipeline completo com EAR/MAR)
-- **Modelo compacto** (11MB), adequado para deploy em dispositivos embarcados
+- **Alta taxa de frames** (~25–30 FPS em CPU)
+- **Calibração adaptativa** para diferentes tipos faciais
+- **Sistema leve**, sem necessidade de GPU ou modelos treinados
+- **Adequado para deploy** em dispositivos embarcados automotivos
 
-A arquitetura híbrida demonstrou ser eficaz ao combinar a velocidade da análise geométrica com a robustez da rede neural, atendendo aos requisitos de baixa latência exigidos em sistemas automotivos de segurança.
+A abordagem demonstrou ser eficaz ao combinar velocidade e simplicidade, atendendo aos requisitos de baixa latência exigidos em sistemas automotivos de segurança.
 
 ### 6.1 Trabalhos Futuros
 
-- Quantização do modelo para TensorFlow Lite (INT8) para acelerar inferência em hardware embarcado
 - Integração com câmeras infravermelhas para operação noturna
-- Coleta de dados adicionais para melhorar o recall da classe "Closed"
 - Implementação de sistema de alerta sonoro e vibração do volante
 - Testes em condições reais de condução (estrada)
+- Pré-processamento com CLAHE para maior robustez à iluminação
 
 ---
 
@@ -309,15 +160,11 @@ A arquitetura híbrida demonstrou ser eficaz ao combinar a velocidade da anális
 
 1. Soukupová, T., & Čech, J. (2016). Real-Time Eye Blink Detection using Facial Landmarks. *21st Computer Vision Winter Workshop*.
 
-2. Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., & Chen, L. C. (2018). MobileNetV2: Inverted Residuals and Linear Bottlenecks. *IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, 4510–4520.
+2. Lugaresi, C., et al. (2019). MediaPipe: A Framework for Building Perception Pipelines. *arXiv preprint arXiv:1906.08172*.
 
-3. Lugaresi, C., et al. (2019). MediaPipe: A Framework for Building Perception Pipelines. *arXiv preprint arXiv:1906.08172*.
+3. Rosebrock, A. (2017). Eye blink detection with OpenCV, Python, and dlib. *PyImageSearch*. Disponível em: https://pyimagesearch.com/2017/04/24/eye-blink-detection-opencv-python-dlib/
 
-4. Hoang Tung (2023). Drowsiness Dataset. Kaggle. Disponível em: https://www.kaggle.com/datasets/hoangtung719/drowsiness-dataset
-
-5. Rosebrock, A. (2017). Eye blink detection with OpenCV, Python, and dlib. *PyImageSearch*. Disponível em: https://pyimagesearch.com/2017/04/24/eye-blink-detection-opencv-python-dlib/
-
-6. Zhang, K., Zhang, Z., & Li, Z. (2016). Joint Face Detection and Alignment Using Multitask Cascaded Convolutional Networks. *IEEE Signal Processing Letters*, 23(10), 1499–1503.
+4. Zhang, K., Zhang, Z., & Li, Z. (2016). Joint Face Detection and Alignment Using Multitask Cascaded Convolutional Networks. *IEEE Signal Processing Letters*, 23(10), 1499–1503.
 
 ---
 
@@ -325,30 +172,18 @@ A arquitetura híbrida demonstrou ser eficaz ao combinar a velocidade da anális
 
 ```
 visaoComputacional/
-├── main.py                        # CLI principal
+├── main.py                        # Ponto de entrada
 ├── requirements.txt               # Dependências Python
 ├── README.md                      # Instruções de uso
 ├── notebooks/
 │   └── analise_resultados.ipynb   # Notebook de análise
 ├── src/
 │   ├── config.py                  # Configurações e hiperparâmetros
-│   ├── data_preparation.py        # Download e organização dos datasets
-│   ├── train_model.py             # Treinamento (MobileNetV2 / CNN)
 │   ├── landmarks.py               # EAR, MAR e detecção via MediaPipe
-│   ├── detector.py                # Detecção em tempo real com HUD
-│   └── evaluate.py                # Avaliação e métricas
+│   └── detector.py                # Detecção em tempo real com HUD
 ├── data/
-│   ├── processed/
-│   │   ├── train/                 # 8.548 imagens
-│   │   ├── val/                   # 1.554 imagens
-│   │   └── test/                  # 1.464 imagens
-│   └── models/
-│       └── eye_classifier_cnn.h5  # Modelo treinado (11MB)
-└── results/
-    ├── final_classification_report.txt
-    ├── final_confusion_matrix.png
-    ├── roc_curves.png
-    └── inference_benchmark.txt
+│   └── models/                    # Modelo Face Landmarker (.task)
+└── results/                       # Gráficos e relatórios
 ```
 
 ## Apêndice B: Comandos de Reprodução
@@ -361,15 +196,6 @@ source venv/bin/activate
 # Instalar dependências
 pip install -r requirements.txt
 
-# Baixar e preparar dataset
-python main.py prepare --dataset drowsiness
-
-# Treinar modelo
-python main.py train --model mobilenetv2
-
-# Avaliar no conjunto de teste
-python main.py evaluate --full
-
 # Executar detecção em tempo real
-python main.py detect --camera 0
+python main.py --camera 0
 ```
