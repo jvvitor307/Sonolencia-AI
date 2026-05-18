@@ -26,13 +26,38 @@ Camera → MediaPipe Face Mesh → EAR/MAR Geométrico → Alerta
 └── results/                   # Gráficos e relatórios
 ```
 
+## Pré-requisitos
+
+- Python >= 3.11
+- [uv](https://docs.astral.sh/uv/) (gerenciador de pacotes)
+- Câmera (webcam)
+
 ## Instalação
 
+1. Clone o repositório:
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/seu-usuario/Sonolencia-AI.git
+cd Sonolencia-AI
 ```
 
-## Uso
+2. Crie o ambiente virtual e instale as dependências com `uv`:
+```bash
+uv sync
+```
+
+## Execução
+
+Ative o ambiente virtual e execute:
+```bash
+# Linux/macOS
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# Windows (CMD)
+.venv\Scripts\activate.bat
+```
 
 ```bash
 python main.py --camera 0
@@ -42,9 +67,20 @@ Controles:
 - `q` — sair
 - `g` — salvar gráfico EAR/MAR em tempo real
 
-Opções adicionais:
+### Opções adicionais
+
 ```bash
-python main.py --save --output video.avi  # Salvar vídeo
+# Salvar vídeo de saída
+python main.py --save --output video.avi
+
+# Usar outra câmera
+python main.py --camera 1
+```
+
+### Executar sem ativar o ambiente
+
+```bash
+uv run python main.py --camera 0
 ```
 
 ## Fundamentação Matemática
