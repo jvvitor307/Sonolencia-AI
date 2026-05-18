@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 from src.config import (
     RESULTS_DIR, EAR_THRESHOLD, MAR_THRESHOLD, EYES_CLOSED_TIME,
+    CALIBRATION_DURATION, CALIBRATION_RATIO, CALIBRATION_MIN_SAMPLES,
 )
 from src.landmarks import (
     get_landmarks, calculate_ear, calculate_mar,
@@ -30,11 +31,48 @@ class DrowsinessDetector:
         self.time_history = collections.deque(maxlen=300)
 
         self.alarm_active = False
-        self.start_time = time.time()
 
-    def _draw_hud(self, frame, result, fps):
+        self.calibration_samples = []
+        self.calibrated_ear_threshold = None
+        self.calibration_done = False
+
+    def _get_ear_threshold(self):
+        if self.calibrated_ear_threshold is not None:
+            return self.calibrated_ear_threshold
+        return EAR_THRESHOLD
+
+    def _update_calibration(self, ear, elapsed):
+        if self.calibration_done:
+            return
+
+        if elapsed <= CALIBRATION_DURATION:
+            self.calibration_samples.append(ear)
+        elif elapsed > CALIBRATION_DURATION:
+            if len(self.calibration_samples) >= CALIBRATION_MIN_SAMPLES:
+                samples = np.array(self.calibration_samples)
+                q25 = np.percentile(samples, 25)
+                open_ear_samples = samples[samples >= q25]
+                avg_ear = np.mean(open_ear_samples)
+                self.calibrated_ear_threshold = round(avg_ear * CALIBRATION_RATIO, 3)
+                print(f"Calibrado: EAR medio={avg_ear:.3f}, threshold={self.calibrated_ear_threshold}")
+            else:
+                print(f"Calibracao falhou ({len(self.calibration_samples)} amostras). Usando padrao: {EAR_THRESHOLD}")
+            self.calibration_done = True
+
+    def _draw_hud(self, frame, result, fps, elapsed):
         h, w = frame.shape[:2]
+        ear_threshold = self._get_ear_threshold()
         overlay = frame.copy()
+
+        if not self.calibration_done:
+            progress = min(elapsed / CALIBRATION_DURATION, 1.0)
+            bar_w = int(progress * w)
+            cv2.rectangle(frame, (0, 0), (bar_w, 6), (0, 255, 255), -1)
+            cv2.putText(frame, f"Calibrando... {progress*100:.0f}%", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(frame, f"Mantenha os olhos abertos", (10, 65),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            return frame
 
         if result['drowsy']:
             color = (0, 0, 255)
@@ -57,8 +95,8 @@ class DrowsinessDetector:
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, info_y),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        ear_color = (0, 0, 255) if result['ear'] < EAR_THRESHOLD else (0, 255, 0)
-        cv2.putText(frame, f"EAR: {result['ear']:.3f}", (10, info_y + 30),
+        ear_color = (0, 0, 255) if result['ear'] < ear_threshold else (0, 255, 0)
+        cv2.putText(frame, f"EAR: {result['ear']:.3f} (>{ear_threshold:.3f})", (10, info_y + 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, ear_color, 2)
 
         mar_color = (0, 0, 255) if result['mar'] > MAR_THRESHOLD else (0, 255, 0)
@@ -99,8 +137,10 @@ class DrowsinessDetector:
             writer = cv2.VideoWriter(output_path, fourcc, 20.0, (640, 480))
 
         prev_time = time.time()
+        self.start_time = time.time()
 
         print("Pressione 'q' para sair, 'g' para gravar gráfico EAR.")
+        print(f"Calibrando por {CALIBRATION_DURATION}s - mantenha os olhos abertos!")
 
         while True:
             ret, frame = cap.read()
@@ -119,14 +159,23 @@ class DrowsinessDetector:
                 'eyes_closed_start': None,
             }
 
+            elapsed = time.time() - self.start_time
+
             if landmarks is not None:
-                result = detect_drowsiness(landmarks, self.eyes_closed_start, self.mar_counter)
-                self.eyes_closed_start = result['eyes_closed_start']
-                self.mar_counter = result['mar_counter']
+                ear = calculate_ear(landmarks)
+                self._update_calibration(ear, elapsed)
+
+                if self.calibration_done:
+                    result = detect_drowsiness(
+                        landmarks, self.eyes_closed_start, self.mar_counter,
+                        ear_threshold=self._get_ear_threshold(),
+                    )
+                    self.eyes_closed_start = result['eyes_closed_start']
+                    self.mar_counter = result['mar_counter']
 
                 current_time = time.time() - self.start_time
-                self.ear_history.append(result['ear'])
-                self.mar_history.append(result['mar'])
+                self.ear_history.append(ear)
+                self.mar_history.append(calculate_mar(landmarks))
                 self.time_history.append(current_time)
             else:
                 self.eyes_closed_start = None
@@ -139,7 +188,7 @@ class DrowsinessDetector:
             self.fps_history.append(fps)
             avg_fps = np.mean(self.fps_history)
 
-            frame = self._draw_hud(frame, result, avg_fps)
+            frame = self._draw_hud(frame, result, avg_fps, elapsed)
 
             if display:
                 cv2.imshow('Drowsiness Detection', frame)
@@ -167,13 +216,14 @@ class DrowsinessDetector:
         times = list(self.time_history)
         ears = list(self.ear_history)
         mars = list(self.mar_history)
+        ear_threshold = self._get_ear_threshold()
 
         fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
 
         axes[0].plot(times, ears, color='#2196F3', linewidth=1.5, label='EAR')
-        axes[0].axhline(y=EAR_THRESHOLD, color='red', linestyle='--', linewidth=1,
-                        label=f'Limiar EAR ({EAR_THRESHOLD})')
-        axes[0].fill_between(times, 0, EAR_THRESHOLD, alpha=0.15, color='red')
+        axes[0].axhline(y=ear_threshold, color='red', linestyle='--', linewidth=1,
+                        label=f'Limiar EAR ({ear_threshold})')
+        axes[0].fill_between(times, 0, ear_threshold, alpha=0.15, color='red')
         axes[0].set_ylabel('EAR (Eye Aspect Ratio)', fontsize=12)
         axes[0].set_title('Razão de Aspecto do Olho em Tempo Real', fontsize=14)
         axes[0].legend(loc='upper right')
@@ -197,6 +247,7 @@ class DrowsinessDetector:
         print(f"Gráfico EAR/MAR salvo: {filepath}")
 
     def _save_metrics_report(self, avg_fps):
+        ear_threshold = self._get_ear_threshold()
         filepath = os.path.join(RESULTS_DIR, 'inference_metrics.txt')
         with open(filepath, 'w') as f:
             f.write("=" * 50 + "\n")
@@ -204,7 +255,7 @@ class DrowsinessDetector:
             f.write("=" * 50 + "\n\n")
             f.write(f"FPS medio: {avg_fps:.2f}\n")
             f.write(f"Tempo de inferencia medio: {(1000 / max(avg_fps, 0.1)):.2f} ms\n")
-            f.write(f"Limiar EAR: {EAR_THRESHOLD}\n")
+            f.write(f"Limiar EAR: {ear_threshold} ({'calibrado' if self.calibrated_ear_threshold else 'padrao'})\n")
             f.write(f"Limiar MAR: {MAR_THRESHOLD}\n")
             f.write(f"Tempo para olhos fechados: {EYES_CLOSED_TIME}s\n")
             f.write(f"Frames consecutivos para boca: 10\n")
